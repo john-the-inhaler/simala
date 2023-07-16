@@ -28,9 +28,6 @@ impl<'a> Lexer<'a> {
         else { self.cur.forw() }
         Some((e, c))
     }
-    fn pull_char(&mut self) -> Option<char> {
-        self.pull().map(|x| x.1)
-    }
     fn skip_whitespace(&mut self) {
         while let Some(&(_, x)) = self.inner.peek() {
             if !x.is_whitespace() { break }
@@ -54,6 +51,11 @@ enum Token<'a> {
     
     Add, Sub, Mul, Div, Pow,
     Equ
+}
+impl<'a> Token<'a> {
+    fn is_comment(&self) -> bool { 
+        match self { Token::Comment(_) => true, _ => false }
+    }
 }
 impl<'a> Iterator for Lexer<'a> {
     type Item = (Loc, Result<Token<'a>, String>);
@@ -113,11 +115,41 @@ impl<'a> Iterator for Lexer<'a> {
 }
 
 // Parser
+use std::iter::Filter;
+enum UchTopLevel<'a> {
+    Define(&'a str, UchExpr<'a>),
+    Goal(UchExpr<'a>)
+}
+enum Oper { Add, Sub, Mul, Div, Pow }
+enum UchExpr<'a> {
+    Ident(&'a str),
+    Number(f64),
+    UnOp(Oper, Box<UchExpr<'a>>),
+    BiOp(Oper, Box<UchExpr<'a>>, Box<UchExpr<'a>>),
+}
+
+struct Parser<'a> {
+    inner: Lexer<'a>
+}
+impl<'a> Parser<'a> {
+    fn new(inner: Lexer<'a>) -> Self {
+        Parser { inner }
+    }
+    fn pull(&mut self) -> Option<<Lexer<'a> as Iterator>::Item> {
+        let mut r = self.inner.next()?;
+        while r.1.is_ok() && r.1.as_ref().unwrap().is_comment() {
+            r = self.inner.next()?;
+        }
+        Some(r)
+    }
+}
+
 // Checker
 // Main
 use std::io::{self, Read};
 use std::fs::File;
 pub fn main() -> io::Result<()> {
+    // Open -> Lex -> Parse -> Check(detach) -> Run
     let buff = {
         let mut file = File::open("test.sima")?;
         let mut buff = String::with_capacity(file.metadata()?.len() as usize);
