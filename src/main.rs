@@ -49,6 +49,28 @@ enum Token<'a> {
     Literal(&'a str),
     Comment(&'a str),
     Semicolon,
+    
+}
+impl<'a> Iterator for Lexer<'a> {
+    type Item = (Loc, Result<Token<'a>, String>);
+    fn next(&mut self) -> Option<Self::Item> {
+        let sloc = self.cur.clone();
+        let (start, init) = self.pull()?;
+        Some((sloc, match init {
+            x if x.is_alphabetic() => {
+                let mut end = start;
+                while let Some(&(_, chr)) = self.inner.peek() {
+                    if !(chr.is_alphanumeric() || chr == '_') {
+                        break
+                    }
+                    end = self.pull().unwrap().0;
+                }
+                if self.inner.peek().is_none() { end = self.base.len() }
+                Ok(Token::Ident(&self.base[start .. end]))
+            }
+            x => Err(format!("Unrecognised Token {x:?}"))
+        }))
+    }
 }
 
 // Parser
