@@ -1,0 +1,9 @@
+// Angular frequency
+
+= r ω ^ 2;
+
+ω = θ / T;
+θ = 2 π;
+r = 3;
+
+// final line comment
