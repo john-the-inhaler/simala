@@ -42,6 +42,37 @@ features list (non-exhaustive)
   tuple as a way to describe their parameters, but the language doesn't have 
   tuples.
 
+## POA (Plan of Action)
+- [ ] lexer
+  - [X] Idents, Numbers, Comments
+  - [X] Operators (`+-*/^`)
+  - [ ] Parens
+  - [X] Definition (`=`)
+- [ ] parser
+    - [ ] Top Level
+        - [ ] Definition
+            - [ ] non-func
+            - [ ] func
+        - [ ] Goal
+    - [ ] Expression
+        - [ ] Atom   (idents, numbers, func application)
+        - [ ] Tight  (`^` and `(...)`)
+        - [ ] Factor (space mult)
+        - [ ] Term   (`*/`)
+        - [ ] Phrase (`+-`)
+- [ ] checker
+    - [ ] detachment (*1)
+    - [ ] basic type checking
+    - [ ] existance checking
+    - [ ] dependency-ordering
+- [ ] runtime
+    - [ ] interpreter
+    - [ ] GC (not needed until closures) 
+    - [ ] closures
+*1: Currently both the lexer and parser do not make new strings for tokens or
+    the AST. They rely on the entire file being in memory. Detachment is the
+    process of taking the required strings out of our AST, detaching it from
+    the file.
 ## Future
 I've looked into higher precision floating point libraries (it's a calculator
 language, people'll want them.), And i've found the `qd` crate which offers a
