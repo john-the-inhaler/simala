@@ -1,6 +1,7 @@
 // Lexer
 use std::str::CharIndices;
 use std::iter::Peekable;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 struct Loc{
@@ -42,7 +43,7 @@ impl<'a> Lexer<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Token<'a> {
     Ident(&'a str),
     Literal(&'a str),
@@ -55,6 +56,28 @@ enum Token<'a> {
 impl<'a> Token<'a> {
     fn is_comment(&self) -> bool { 
         match self { Token::Comment(_) => true, _ => false }
+    }
+    fn var_eq(&self, oth: &Self) -> bool {
+        use std::mem::discriminant;
+        discriminant(self) == discriminant(oth)
+    }
+}
+impl<'a> fmt::Display for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        use Token::*;
+        match self {
+            Add => f.write_str("'+'")?,
+            Sub => f.write_str("'+'")?,
+            Mul => f.write_str("'+'")?,
+            Div => f.write_str("'+'")?,
+            Pow => f.write_str("'+'")?,
+            Equ => f.write_str("'='")?,
+            Semicolon => f.write_str("';'")?,
+            Ident(_) => f.write_str("Identifier")?,
+            Literal(_) => f.write_str("Literal")?,
+            Comment(_) => f.write_str("Comment")?, 
+        }
+        Ok(())
     }
 }
 impl<'a> Iterator for Lexer<'a> {
@@ -115,7 +138,6 @@ impl<'a> Iterator for Lexer<'a> {
 }
 
 // Parser
-use std::iter::Filter;
 enum UchTopLevel<'a> {
     Define(&'a str, UchExpr<'a>),
     Goal(UchExpr<'a>)
@@ -142,7 +164,17 @@ impl<'a> Parser<'a> {
         }
         Some(r)
     }
+    fn consume<'b: 'a>(&mut self, test: Token<'b>) -> Result<(), String> {
+        match self.inner.next() {
+            None => Err(format!("Expected {test}, found nothing")),
+            Some((_, Err(msg))) => Err(msg),
+            Some((_, Ok(toc))) => if toc.var_eq(&test) { Ok(()) } 
+                                  else {Err(format!("Expected {test}, got different {toc}"))}
+        }
+    }
 }
+
+
 
 // Checker
 // Main
