@@ -44,7 +44,7 @@ impl<'a> Lexer<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-enum Token<'a> {
+pub enum Token<'a> {
     Ident(&'a str),
     Literal(&'a str),
     Comment(&'a str),
@@ -53,6 +53,21 @@ enum Token<'a> {
     Add, Sub, Mul, Div, Pow,
     Equ
 }
+#[allow(dead_code)]
+mod tl {
+    use super::Token::{self, *};
+    pub const IDENT  : Token<'static> = Ident("");
+    pub const LITERAL: Token<'static> = Literal("");
+    pub const COMMENT: Token<'static> = Comment("");
+    pub const SEMICOLON: Token<'static> = Semicolon;
+    pub const ADD: Token<'static> = Add;
+    pub const SUB: Token<'static> = Sub;
+    pub const MUL: Token<'static> = Mul;
+    pub const DIV: Token<'static> = Div;
+    pub const POW: Token<'static> = Pow;
+    pub const EQU: Token<'static> = Equ;
+}
+
 impl<'a> Token<'a> {
     fn is_comment(&self) -> bool { 
         match self { Token::Comment(_) => true, _ => false }
@@ -164,16 +179,49 @@ impl<'a> Parser<'a> {
         }
         Some(r)
     }
-    fn consume<'b: 'a>(&mut self, test: Token<'b>) -> Result<(), String> {
+    fn consume<'b: 'a>(&mut self, test: Token<'b>) -> Result<Token, String> {
         match self.inner.next() {
             None => Err(format!("Expected {test}, found nothing")),
             Some((_, Err(msg))) => Err(msg),
-            Some((_, Ok(toc))) => if toc.var_eq(&test) { Ok(()) } 
+            Some((_, Ok(toc))) => if toc.var_eq(&test) { Ok(toc) } 
                                   else {Err(format!("Expected {test}, got different {toc}"))}
         }
     }
+    fn test<'b: 'a>(&mut self, test: Token<'b>) -> Result<bool, String> {
+        match self.inner.next() {
+            None => Ok(false),
+            Some((_, Err(msg))) => Err(msg),
+            Some((_, Ok(toc))) => Ok(toc.var_eq(&test)) 
+        }
+    }
 }
-
+impl<'a> Parser<'a> {
+    // Parsing functions
+    fn parse_atom(&mut self) -> Result<UchExpr<'a>, String> {
+        // <atom> ::= <ident> | <literal>
+        let x = self.inner.next();
+        if x.is_none() { 
+            return Err(format!("Expected Either {} or {}, got nothing", tl::IDENT, tl::LITERAL));
+        }
+        let (_, x) = x.unwrap();
+        if x.is_err() { return Err(x.unwrap_err()); }
+        let x = x.unwrap(); 
+        match x {
+            Token::Ident(id) => Ok(UchExpr::Ident(id)),
+            Token::Literal(lit) => Ok(UchExpr::Number(lit.parse().expect("INTERNAL ERROR [float parse]"))),
+            x => Err(format!("Expected Either {} or {}, got {x}", tl::IDENT, tl::LITERAL)),
+        }
+    }
+    fn parse_tight(&mut self) -> Result<UchExpr<'a>, String> {
+        let cur = self.parse_atom()?;
+        if self.test(tl::POW)? {
+            self.pull();
+            let exp = self.parse_tight()?;
+            return Ok(UchExpr::BiOp(Oper::Pow, Box::new(cur), Box::new(exp)));
+        }
+        return Ok(cur);
+    }
+}
 
 
 // Checker
