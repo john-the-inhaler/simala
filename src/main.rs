@@ -3,7 +3,7 @@ use std::str::CharIndices;
 use std::iter::Peekable;
 use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct Loc{
     line: usize,
     col: usize,
@@ -161,14 +161,14 @@ impl<'a> Iterator for Lexer<'a> {
 }
 
 // Parser
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum UchTopLevel<'a> {
     Define(&'a str, UchExpr<'a>),
     Goal(UchExpr<'a>)
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Oper { Add, Sub, Mul, Div, Pow }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum UchExpr<'a> {
     Ident(&'a str),
     Number(f64),
@@ -225,7 +225,7 @@ impl<'a> Parser<'a> {
     // Parsing functions
     // these come in pairs `parse_x` and `test_x` self explanitory
     // `test_x` can only (AND MUST ONLY) lookahead one token.
-    fn parse_atom(&mut self) -> Result<UchExpr<'a>, String> {
+    pub fn parse_atom(&mut self) -> Result<UchExpr<'a>, String> {
         // <atom> ::= <ident> | <literal>
         let x = self.inner.next();
         if x.is_none() { 
@@ -240,11 +240,11 @@ impl<'a> Parser<'a> {
             x => Err(format!("Expected Either {} or {}, got {x}", tl::IDENT, tl::LITERAL)),
         }
     }
-    fn test_atom(&mut self) -> Result<bool, String> {
+    pub fn test_atom(&mut self) -> Result<bool, String> {
         Ok(self.test(tl::IDENT)? || self.test(tl::LITERAL)?)
     }
 
-    fn parse_tight(&mut self) -> Result<UchExpr<'a>, String> {
+    pub fn parse_tight(&mut self) -> Result<UchExpr<'a>, String> {
         // <tight> ::= <atom> | <atom> "^" <tight> | "(" <expr> ")" 
         //           | "-" <tight> | "+" <tight>
         if self.test(tl::SUB)? {
@@ -269,12 +269,12 @@ impl<'a> Parser<'a> {
         }
         return Ok(cur);
     }
-    fn test_tight(&mut self) -> Result<bool, String> {
+    pub fn test_tight(&mut self) -> Result<bool, String> {
         Ok(self.test_atom()? || self.test(tl::OPAREN)?
         || self.test(tl::SUB)? || self.test(tl::ADD)?)
     }
     // lol
-    fn parse_factor(&mut self) -> Result<UchExpr<'a>, String> {
+    pub fn parse_factor(&mut self) -> Result<UchExpr<'a>, String> {
         // <factor> ::= <tight> | <tight> <factor>
         let mut cur = self.parse_tight()?;
         while self.test_tight()? {
@@ -283,10 +283,10 @@ impl<'a> Parser<'a> {
         }
         Ok(cur)
     }
-    fn test_factor(&mut self) -> Result<bool, String> {
+    pub fn test_factor(&mut self) -> Result<bool, String> {
         self.test_tight()
     }
-    fn parse_term(&mut self) -> Result<UchExpr<'a>, String> {
+    pub fn parse_term(&mut self) -> Result<UchExpr<'a>, String> {
         // <term> ::= <factor> | <factor> "*" <term> | <factor> "/" <term>
         let cur = self.parse_factor()?;
         return Ok(if self.test(tl::MUL)? {
@@ -301,10 +301,10 @@ impl<'a> Parser<'a> {
             cur
         })
     }
-    fn test_term(&mut self) -> Result<bool, String> {
+    pub fn test_term(&mut self) -> Result<bool, String> {
         self.test_factor()
     }
-    fn parse_phrase(&mut self) -> Result<UchExpr<'a>, String> {
+    pub fn parse_phrase(&mut self) -> Result<UchExpr<'a>, String> {
         // <phrase> ::= <term> | <term> "+" <phrase> | <term> "-" <phrase>
         let cur = self.parse_term()?;
         return Ok(if self.test(tl::ADD)? {
@@ -319,11 +319,11 @@ impl<'a> Parser<'a> {
             cur
         })
     }
-    fn test_phrase(&mut self) -> Result<bool, String> {
+    pub fn test_phrase(&mut self) -> Result<bool, String> {
         self.test_term()
     }
 
-    fn parse_expr(&mut self) -> Result<UchExpr<'a>, String> { self.parse_phrase() }
+    pub fn parse_expr(&mut self) -> Result<UchExpr<'a>, String> { self.parse_phrase() }
 }
 
 impl<'a> Iterator for Parser<'a> {
@@ -378,4 +378,58 @@ pub fn main() -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // I've already written the lexer, but I don't want to break this.
+    #[test]
+    fn lexer_comments() {
+        let source = "// Comment 1\n// Comment 2";
+        let mut lex = Lexer::new(source);
+        assert_eq!(lex.next(),
+            Some((Loc{ line: 1, col: 1}, Ok(Token::Comment("// Comment 1"))))
+        );
+        assert_eq!(lex.next(),
+            Some((Loc{ line: 2, col: 1}, Ok(Token::Comment("// Comment 2"))))
+        );
+    }
+    #[test]
+    fn lexer_number() {
+        let source = "1 2.2 03 04.5";
+        let mut lex = Lexer::new(source);
+        assert_eq!(lex.next(), Some((Loc{line:1,col:1}, Ok(Token::Literal("1")))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:3}, Ok(Token::Literal("2.2")))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:7}, Ok(Token::Literal("03")))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:10}, Ok(Token::Literal("04.5")))));
+    }
+    #[test]
+    fn lexer_ident() {
+        let source = "ascii ὐνικοδε";
+        let mut lex = Lexer::new(source);
+        assert_eq!(lex.next(), Some((Loc{line:1,col:1}, Ok(Token::Ident("ascii")))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:7}, Ok(Token::Ident("ὐνικοδε")))));
+    }
+    fn lexer_symbols() {
+        let source = "+-*/()=;";
+        let mut lex = Lexer::new(source);
+        assert_eq!(lex.next(), Some((Loc{line:1,col:1}, Ok(Token::Add))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:2}, Ok(Token::Sub))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:3}, Ok(Token::Mul))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:4}, Ok(Token::Div))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:5}, Ok(Token::Oparen))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:6}, Ok(Token::Cparen))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:7}, Ok(Token::Equ))));
+        assert_eq!(lex.next(), Some((Loc{line:1,col:8}, Ok(Token::Semicolon))));
+    }
+    #[test]
+    fn parser_atom() {
+        let source = "ident 1337";
+        let mut par = Parser::new(Lexer::new(source));
+        assert_eq!(par.parse_atom(), Ok(UchExpr::Ident("ident")));
+        assert_eq!(par.parse_atom(), Ok(UchExpr::Number(1337f64)));
+    }
+    // further testing needed
 }

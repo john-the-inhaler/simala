@@ -52,14 +52,14 @@ features list (non-exhaustive)
     - [ ] Top Level
         - [ ] Definition
             - [ ] non-func
-            - [ ] func
+            - [X] func
         - [ ] Goal
     - [ ] Expression
         - [ ] Atom   (idents, numbers, func application)
-        - [ ] Tight  (`^` and `(...)`)
-        - [ ] Factor (space mult)
-        - [ ] Term   (`*/`)
-        - [ ] Phrase (`+-`)
+        - [X] Tight  (`^` and `(...)`)  NOTE: i added (`"-"<tight>` and `"+"<tight>`)
+        - [X] Factor (space mult)
+        - [X] Term   (`*/`)
+        - [X] Phrase (`+-`)
 - [ ] checker
     - [ ] detachment (*1)
     - [ ] basic type checking
