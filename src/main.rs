@@ -161,11 +161,14 @@ impl<'a> Iterator for Lexer<'a> {
 }
 
 // Parser
+#[derive(Debug)]
 enum UchTopLevel<'a> {
     Define(&'a str, UchExpr<'a>),
     Goal(UchExpr<'a>)
 }
+#[derive(Debug)]
 enum Oper { Add, Sub, Mul, Div, Pow }
+#[derive(Debug)]
 enum UchExpr<'a> {
     Ident(&'a str),
     Number(f64),
@@ -203,6 +206,7 @@ impl<'a> Parser<'a> {
         }
     }
 }
+#[allow(dead_code)]
 impl<'a> Parser<'a> {
     // Parsing functions
     // these come in pairs `parse_x` and `test_x` self explanitory
@@ -227,7 +231,22 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_tight(&mut self) -> Result<UchExpr<'a>, String> {
-        // <tight> ::= <atom> | <atom> "^" <tight>
+        // <tight> ::= <atom> | <atom> "^" <tight> | "(" <expr> ")" 
+        //           | "-" <tight> | "+" <tight>
+        if self.test(tl::SUB)? {
+            self.pull();
+            return Ok(UchExpr::UnOp(Oper::Sub, Box::new(self.parse_tight()?)));
+        }
+        if self.test(tl::ADD)? {
+            self.pull();
+            return self.parse_tight();
+        }
+        if self.test(tl::OPAREN)? {
+            self.pull();
+            let cur = self.parse_expr()?;
+            self.consume(tl::CPAREN)?;
+            return Ok(cur)
+        }
         let cur = self.parse_atom()?;
         if self.test(tl::POW)? {
             self.pull();
@@ -237,7 +256,8 @@ impl<'a> Parser<'a> {
         return Ok(cur);
     }
     fn test_tight(&mut self) -> Result<bool, String> {
-        Ok(self.test_atom()? || self.test(tl:Oparen))
+        Ok(self.test_atom()? || self.test(tl::OPAREN)?
+        || self.test(tl::SUB)? || self.test(tl::ADD)?)
     }
     // lol
     fn parse_factor(&mut self) -> Result<UchExpr<'a>, String> {
@@ -249,6 +269,47 @@ impl<'a> Parser<'a> {
         }
         Ok(cur)
     }
+    fn test_factor(&mut self) -> Result<bool, String> {
+        self.test_tight()
+    }
+    fn parse_term(&mut self) -> Result<UchExpr<'a>, String> {
+        // <term> ::= <factor> | <factor> "*" <term> | <factor> "/" <term>
+        let cur = self.parse_factor()?;
+        return Ok(if self.test(tl::MUL)? {
+            self.pull();
+            let nxt = self.parse_term()?;
+            UchExpr::BiOp(Oper::Mul, Box::new(cur), Box::new(nxt))
+        } else if self.test(tl::DIV)? {
+            self.pull();
+            let nxt = self.parse_term()?;
+            UchExpr::BiOp(Oper::Div, Box::new(cur), Box::new(nxt))
+        } else {
+            cur
+        })
+    }
+    fn test_term(&mut self) -> Result<bool, String> {
+        self.test_factor()
+    }
+    fn parse_phrase(&mut self) -> Result<UchExpr<'a>, String> {
+        // <phrase> ::= <term> | <term> "+" <phrase> | <term> "-" <phrase>
+        let cur = self.parse_term()?;
+        return Ok(if self.test(tl::ADD)? {
+            self.pull();
+            let next = self.parse_phrase()?;
+            UchExpr::BiOp(Oper::Add, Box::new(cur), Box::new(next))
+        } else if self.test(tl::SUB)? {
+            self.pull();
+            let next = self.parse_phrase()?;
+            UchExpr::BiOp(Oper::Sub, Box::new(cur), Box::new(next))
+        } else {
+            cur
+        })
+    }
+    fn test_phrase(&mut self) -> Result<bool, String> {
+        self.test_term()
+    }
+
+    fn parse_expr(&mut self) -> Result<UchExpr<'a>, String> { self.parse_phrase() }
 }
 
 
