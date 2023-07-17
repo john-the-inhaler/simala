@@ -43,7 +43,7 @@ impl<'a> Lexer<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token<'a> {
     Ident(&'a str),
     Literal(&'a str),
@@ -177,29 +177,43 @@ enum UchExpr<'a> {
 }
 
 struct Parser<'a> {
-    inner: Lexer<'a>
+    inner: Peekable<Lexer<'a>>
 }
 impl<'a> Parser<'a> {
     fn new(inner: Lexer<'a>) -> Self {
-        Parser { inner }
+        Parser { inner: inner.peekable() }
     }
     fn pull(&mut self) -> Option<<Lexer<'a> as Iterator>::Item> {
         let mut r = self.inner.next()?;
         while r.1.is_ok() && r.1.as_ref().unwrap().is_comment() {
             r = self.inner.next()?;
         }
+        // println!("\t\x1b[35mPULLING\x1b[0m {r:?}");
         Some(r)
     }
+    fn peek_pull(&mut self) -> Option<<Lexer<'a> as Iterator>::Item> {
+        let mut r = self.inner.peek()?;
+        while r.1.is_ok() && r.1.as_ref().unwrap().is_comment() {
+            if let (loc, Err(msg)) = self.inner.next()? {
+                return Some((loc, Err(msg)))
+            }
+            r = self.inner.peek()?;
+        }
+        // println!("\t\x1b[35mPEEK PULLING\x1b[0m {r:?}");
+        Some((r.0.clone(), r.1.clone()))
+    }
     fn consume<'b: 'a>(&mut self, test: Token<'b>) -> Result<Token, String> {
-        match self.inner.next() {
+        //match {let x = self.pull(); println!("\t\x1b[35mCONSUMING\x1b[0m {test} GOT {x:?}"); x } {
+        match self.pull() {
             None => Err(format!("Expected {test}, found nothing")),
             Some((_, Err(msg))) => Err(msg),
             Some((_, Ok(toc))) => if toc.var_eq(&test) { Ok(toc) } 
-                                  else {Err(format!("Expected {test}, got different {toc}"))}
+                                  else {Err(format!("Expected {test}, got {toc}"))}
         }
     }
     fn test<'b: 'a>(&mut self, test: Token<'b>) -> Result<bool, String> {
-        match self.inner.next() {
+        //match {let x = self.peek_pull(); println!("\t\x1b[35mTESTING\x1b[0m {test} VS {x:?}"); x } {
+        match self.peek_pull() {
             None => Ok(false),
             Some((_, Err(msg))) => Err(msg),
             Some((_, Ok(toc))) => Ok(toc.var_eq(&test)) 
@@ -312,6 +326,28 @@ impl<'a> Parser<'a> {
     fn parse_expr(&mut self) -> Result<UchExpr<'a>, String> { self.parse_phrase() }
 }
 
+impl<'a> Iterator for Parser<'a> {
+    type Item = (Loc, Result<UchTopLevel<'a>, String>);
+    fn next(&mut self) -> Option<Self::Item> {
+        let (sloc, res) = self.pull()?;
+        if res.is_err() { return Some((sloc, Err(res.unwrap_err()))); }
+        let res = res.unwrap();
+        return match res {
+            Token::Ident(name) => Some((sloc, (|| {
+                self.consume(tl::EQU)?;
+                let cont = self.parse_expr()?;
+                self.consume(tl::SEMICOLON)?;
+                Ok(UchTopLevel::Define(name, cont))
+            })())),
+            Token::Equ         => Some((sloc, (|| {
+                let cont = self.parse_expr()?;
+                self.consume(tl::SEMICOLON)?;
+                Ok(UchTopLevel::Goal(cont))
+            })())),
+            x => Some((sloc, Err(format!("Expected {} or {} got {x}",tl::IDENT, tl::EQU))))
+        }
+    }
+}
 
 // Checker
 // Main
@@ -327,10 +363,18 @@ pub fn main() -> io::Result<()> {
     };
 
     let lexer = Lexer::new(buff.as_str());
-    for (loc, res) in lexer {
+    let parser = Parser::new(lexer);
+    for (loc, res) in parser {
         match res {
             Ok(tok) => println!("{tok:?}"),
-            Err(msg) => println!("ERROR:test.sima:{}:{}: {msg}", loc.line, loc.col)
+            Err(msg) => {
+                println!("ERROR:test.sima:{}:{}: {msg}", loc.line, loc.col);
+                let pos = buff.as_str().lines().skip(loc.line.saturating_sub(2)).next();
+                match pos {
+                    Some(line) => println!("    {line}"),
+                    None => ()
+                }
+            }
         }
     }
     Ok(())
