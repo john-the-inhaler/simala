@@ -43,10 +43,10 @@ features list (non-exhaustive)
   tuples.
 
 ## POA (Plan of Action)
-- [ ] lexer
+- [X] lexer
   - [X] Idents, Numbers, Comments
   - [X] Operators (`+-*/^`)
-  - [ ] Parens
+  - [X] Parens
   - [X] Definition (`=`)
 - [ ] parser
     - [ ] Top Level

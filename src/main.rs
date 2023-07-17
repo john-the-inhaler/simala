@@ -51,7 +51,9 @@ pub enum Token<'a> {
     Semicolon,
     
     Add, Sub, Mul, Div, Pow,
-    Equ
+    Equ,
+
+    Oparen, Cparen
 }
 #[allow(dead_code)]
 mod tl {
@@ -66,6 +68,8 @@ mod tl {
     pub const DIV: Token<'static> = Div;
     pub const POW: Token<'static> = Pow;
     pub const EQU: Token<'static> = Equ;
+    pub const OPAREN: Token<'static> = Oparen;
+    pub const CPAREN: Token<'static> = Cparen;
 }
 
 impl<'a> Token<'a> {
@@ -91,6 +95,8 @@ impl<'a> fmt::Display for Token<'a> {
             Ident(_) => f.write_str("Identifier")?,
             Literal(_) => f.write_str("Literal")?,
             Comment(_) => f.write_str("Comment")?, 
+            Oparen => f.write_str("'('")?,
+            Cparen => f.write_str("')'")?,
         }
         Ok(())
     }
@@ -147,6 +153,8 @@ impl<'a> Iterator for Lexer<'a> {
             '=' => Ok(Token::Equ),
             '^' => Ok(Token::Pow),
             ';' => Ok(Token::Semicolon),
+            '(' => Ok(Token::Oparen),
+            ')' => Ok(Token::Cparen),
             x => Err(format!("Unrecognised Token {x:?}"))
         }))
     }
@@ -197,6 +205,8 @@ impl<'a> Parser<'a> {
 }
 impl<'a> Parser<'a> {
     // Parsing functions
+    // these come in pairs `parse_x` and `test_x` self explanitory
+    // `test_x` can only (AND MUST ONLY) lookahead one token.
     fn parse_atom(&mut self) -> Result<UchExpr<'a>, String> {
         // <atom> ::= <ident> | <literal>
         let x = self.inner.next();
@@ -212,7 +222,12 @@ impl<'a> Parser<'a> {
             x => Err(format!("Expected Either {} or {}, got {x}", tl::IDENT, tl::LITERAL)),
         }
     }
+    fn test_atom(&mut self) -> Result<bool, String> {
+        Ok(self.test(tl::IDENT)? || self.test(tl::LITERAL)?)
+    }
+
     fn parse_tight(&mut self) -> Result<UchExpr<'a>, String> {
+        // <tight> ::= <atom> | <atom> "^" <tight>
         let cur = self.parse_atom()?;
         if self.test(tl::POW)? {
             self.pull();
@@ -220,6 +235,19 @@ impl<'a> Parser<'a> {
             return Ok(UchExpr::BiOp(Oper::Pow, Box::new(cur), Box::new(exp)));
         }
         return Ok(cur);
+    }
+    fn test_tight(&mut self) -> Result<bool, String> {
+        Ok(self.test_atom()? || self.test(tl:Oparen))
+    }
+    // lol
+    fn parse_factor(&mut self) -> Result<UchExpr<'a>, String> {
+        // <factor> ::= <tight> | <tight> <factor>
+        let mut cur = self.parse_tight()?;
+        while self.test_tight()? {
+            let nxt = self.parse_tight()?;
+            cur = UchExpr::BiOp(Oper::Mul, Box::new(cur), Box::new(nxt));
+        }
+        Ok(cur)
     }
 }
 
