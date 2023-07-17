@@ -69,7 +69,8 @@ features list (non-exhaustive)
     - [ ] interpreter
     - [ ] GC (not needed until closures) 
     - [ ] closures
-*1: Currently both the lexer and parser do not make new strings for tokens or
+### notes
+1) Currently both the lexer and parser do not make new strings for tokens or
     the AST. They rely on the entire file being in memory. Detachment is the
     process of taking the required strings out of our AST, detaching it from
     the file.
