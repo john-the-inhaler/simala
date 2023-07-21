@@ -350,6 +350,87 @@ impl<'a> Iterator for Parser<'a> {
 }
 
 // Checker
+use std::cell::UnsafeCell;
+use std::collections::HashMap;
+type Either<A, B> = Result<A, B>; // because connotation.
+struct Detacher<'input, 'output> {
+    // note: `pool` MUSTN'T BE RESIZED, IT IS ASSUMED TO BE A FIXED SIZE BUFFER
+    // ALTHOUGH IT IS A `String`, INITIALISE IT WITH THE CORRECT AMOUNT OF
+    // CAPACITY OR FACE DEFINITE SEGFAULTS.
+    // DEBUG MODE WILL IMPLEMENT MINIMAL CHECKS, AND IT WILL FORCE ABORT TO
+    // AVOID SEGFAULT.
+    lookup: HashMap<&'input str, &'output str>,
+    pool: UnsafeCell<String>
+} impl<'a, 'b> Detacher<'a, 'b> {
+    unsafe fn inner_ref<'h, 'i: 'h>(&'h mut self) -> &'i String {
+        &* self.pool.get()
+    }
+    unsafe fn inner_mut<'h, 'i: 'h>(&'h mut self) -> &'i mut String {
+        use std::ptr::addr_of_mut;
+        let mut temp = self.pool.get();
+        &mut** addr_of_mut!(temp).cast::<*mut String>()
+    }
+    fn detach(&mut self, inp: &'a str) -> &'b str {
+        if !self.lookup.contains_key(inp) { unsafe {
+            #[cfg(debug_assertions)]
+            let init = self.inner_ref().capacity();
+            let start = self.inner_ref().len();
+            self.inner_mut().push_str(inp);
+            let end = self.inner_ref().len();
+            #[cfg(debug_assertions)]
+            if self.inner_ref().capacity() != init { panic!("Detachment pool resized") }
+            let new = &self.inner_ref()[start .. end];
+            self.lookup.insert(inp, new);
+        } }
+        return self.lookup.get(inp).unwrap()
+    }
+}
+type RegInd  = u16;
+type InstInd = u16;
+enum UchInstr<'a> {
+    LoadConst(Value, RegInd),
+    LoadExt(&'a str, RegInd),
+    BiOp(Oper, RegInd, RegInd, RegInd), 
+    UnOp(Oper, RegInd, RegInd),
+    Call(&'a str, RegInd, Vec<RegInd>),
+    Return(RegInd),
+}
+// IDEA:
+//     When type-checking we "interpret" the program, but only on a type level
+//     We keep track of registers, but they're indices into an entity table.
+//     The entity table. The entity table contain indices to a type table.
+//     The type table which allows us to handle type deduction and generic
+//     typing.
+// TT/Tt refers to TypeTable.
+#[derive(Debug)]
+struct TypeTable(
+    Vec<Either<TtType, Vec<TtRestrict>>>
+); impl TypeTable {
+    fn unify(&mut self, oth: &TypeTable, ind: TtInd) -> TtInd {
+        
+    }
+    fn insert(&mut self, oth: &TypeTable, ind: TtInd) {
+
+    }
+}
+type TtInd = u16;
+#[derive(PartialEq, Debug, Hash)]
+enum TtTypes {
+    Logical,
+    Number,
+    Func(TtInd, Vec<TtInd>)
+}
+enum Restrictions {
+    Add(TtInd),
+    Sub
+}
+
+
+// Runtime
+enum Value {
+//    Logical(bool),
+    Number(f64)
+}
 // Main
 use std::io::{self, Read};
 use std::fs::File;
